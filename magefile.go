@@ -261,13 +261,21 @@ func LinuxMuslDebug() error {
 
 func LinuxMusl386() error {
 	return Builder{
-		extra_tags:    " release yara disable_gui ",
-		goos:          "linux",
-		cc:            "musl-gcc",
-		extra_name:    "-musl",
-		disable_cgo:   true,
+		extra_tags: " release yara disable_gui ",
+		goos:       "linux",
+		cc:         "musl-gcc",
+		extra_name: "-musl",
+		//disable_cgo:   true,
 		extra_ldflags: "-linkmode external -extldflags \"-static\"",
 		arch:          "386"}.Run()
+}
+
+func Linux386() error {
+	return Builder{
+		extra_tags:  " release yara disable_gui ",
+		goos:        "linux",
+		disable_cgo: true,
+		arch:        "386"}.Run()
 }
 
 // A Linux binary without the GUI
@@ -319,7 +327,7 @@ func Version() error {
 	return nil
 }
 
-func Arm() error {
+func LinuxArm() error {
 	return Builder{
 		extra_tags:  " release yara ",
 		goos:        "linux",
@@ -328,7 +336,7 @@ func Arm() error {
 	}.Run()
 }
 
-func Mips() error {
+func LinuxMips() error {
 	return Builder{
 		extra_tags:  " release yara ",
 		goos:        "linux",

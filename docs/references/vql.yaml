@@ -3535,7 +3535,7 @@
 
     {{% /notice %}}
 
-    The `http_client()` plugin allows use to interact with any web
+    The `http_client()` plugin allows us to interact with any web
     services. If the web service returns a json blob, we can parse it
     with the `parse_json()` function (or `parse_xml()` for SOAP
     endpoints). Using the parameters with a POST method we may
@@ -3590,12 +3590,36 @@
     * key: The name of the form element that will receive the file
     * path: This is an OSPath object that we open and stream into the form.
     * accessor: Any accessor required for the path.
+
+    ### Using multiple URLs
+
+    After version 3 of this plugin it is possible to provide a list of
+    URLs to the `url` parameter. The plugin will attempt to connect to
+    each of those in order until a successful connection is made
+    (i.e. HTTP status 200). This allows us to provide fallback URLs
+    for more resilient connections.
+
+    The correct way to check for this is with the `version()` plugin:
+
+    ```vql
+    LET HTTP_CLIENT(URLs) = SELECT * FROM if(
+     condition=version(plugin="http_client")>2,
+     then={
+       SELECT * FROM http_client(url=URLs)
+     }, else={
+       -- Just use the first one for old versions.
+       SELECT * FROM http_client(url=URLs[0])
+     })
+
+     SELECT * FROM HTTP_CLIENT(URLs=["http://www.google.com", "http://www.microsoft.com"])
+     ```
   type: Plugin
-  version: 2
+  version: 3
   args:
   - name: url
     type: string
     description: The URL to fetch
+    repeated: true
     required: true
   - name: params
     type: ordereddict.Dict
@@ -4033,13 +4057,47 @@
     Conditional execution of query
 
     This function evaluates a condition. Note that the values used in the
-    `then` or `else` clause are evaluated lazily. They may be expressions
-    that involve stored queries (i.e. queries stored using the `LET`
-    keyword). These queries will not be evaluated if they are not needed.
+    `then` or `else` clause should be queries which are evaluated lazily.
+
+    These values may be expressions that involve stored queries
+    (i.e. queries stored using the `LET` keyword). These queries will
+    not be evaluated if they are not needed.
 
     This allows a query to cheaply branch. For example, if a parameter is
     given, then perform hash or upload to the server. See the
     `Windows.Search.FileFinder` for an example of how `if()` is used.
+
+    NOTE: Unlike the VQL function variant of `if()`, when the values
+    provided to the `then` or `else` parameters are expressions which
+    are **not** queries, they are converted to queries by
+    materializing them. This will cause those to be evaluated
+    immediately before calling the if() plugin.
+
+    For example:
+    ```sql
+    SELECT * FROM if(condition=FALSE, then=log(message="I ran!"))
+    ```
+
+    Will evaluate the log message despite the condition being
+    FALSE. This happens because Velociraptor will convert the function
+    call into a materialized query before passing it to the if()
+    plugin.
+
+    The correct way to call the if() plugin is with queries:
+    ```sql
+    SELECT * FROM if(condition=FALSE,
+    then={
+       SELECT log(message="I ran!") FROM scope()
+    })
+    ```
+
+    Or use stored queries
+
+    ```sql
+    LET LogQuery = SELECT log(message="I ran!") FROM scope()
+
+    SELECT * FROM if(condition=FALSE, then=LogQuery)
+    ```
   type: Plugin
   args:
   - name: condition
@@ -6328,7 +6386,33 @@
   - windows_386_cgo
   - windows_amd64_cgo
 - name: parse_lines
-  description: Parse a file separated into lines.
+  description: |
+    Parse a file separated into lines.
+
+    Many programs write text based logs separated by line feeds - for
+    example `Apache`, `nginx` or `IIS`. You can parse these files with
+    this plugin.
+
+    The plugin reads a line at the time and emits the line as a `Line`
+    column. To determine when the line ends, the plugin will read
+    ahead up to buffer size bytes and search for the next line
+    feed. By default this is 64kb but you can change it using the
+    `buffer_size` parameter. The Line will have the linefeed removed.
+
+    Note that this plugin will automatically detect when the file is
+    compressed using `gzip` and automatically decompress the file for
+    reading. This makes it suitable to use on a mix of compressed and
+    uncompressed files (typically older log files are compressed and
+    rotated).
+
+    On Windows, some programs insert the UTF16 BOM marker at the start
+    of the file. This plugin will strip this marker automatically but
+    will not convert the line to a regular UTF8 string - you will need
+    to call the `utf16()` on the line to do so explicitly.
+
+    Most users need to further parse the emitted line using for
+    example `grok()` or `parse_string_with_regex()`
+
   type: Plugin
   args:
   - name: filename
@@ -6593,9 +6677,6 @@
     type: accessors.OSPath
     description: The PST file to parse.
     required: true
-  - name: FolderPath
-    type: string
-    description: The folder path to save the attachments from emails.
   - name: accessor
     type: string
     description: The accessor to use
@@ -8525,6 +8606,26 @@
   - linux_amd64_cgo
   - windows_386_cgo
   - windows_amd64_cgo
+- name: secret_add
+  description: Add a new secret
+  type: Function
+  args:
+  - name: name
+    type: string
+    description: Name of the secret
+    required: true
+  - name: type
+    type: string
+    description: Type of the secret
+    required: true
+  - name: secret
+    type: ordereddict.Dict
+    description: A Dict containing key/value pairs for the secret
+    required: true
+  metadata:
+    permissions: SERVER_ADMIN
+  platforms:
+  - linux_amd64_cgo
 - name: secret_define
   description: Define a new secret template
   type: Function
@@ -8833,7 +8934,7 @@
 
     2. The `enrichment` field specifies a VQL lambda which will be
        used to build an enrichment object after a match is made. This
-       is used to additional infomation for the analyst to assess.
+       is used to additional information for the analyst to assess.
 
     3. The `vql` modifier can be used to specify a VQL lambda that
        will be used in a detection clause. The lambda will receive the
@@ -9093,7 +9194,7 @@
     required: true
   - name: sep
     type: string
-    description: The separator that will be used to split
+    description: The separator regex that will be used to split
   - name: sep_string
     type: string
     description: The separator as string that will be used to split
@@ -10711,6 +10812,20 @@
   - darwin_arm64_cgo
   - windows_386_cgo
   - windows_amd64_cgo
+- name: verify
+  description: |
+    verify an artifact
+
+    This function will verify the artifact and flag any potential errors or warnings.
+  type: Function
+  args:
+  - name: artifact
+    type: string
+    description: The artifact to verify. This can be an artifact source in yaml or
+      json or the name of an artifact
+    required: true
+  platforms:
+  - linux_amd64_cgo
 - name: version
   description: |
     Gets the version of a VQL plugin or function.
@@ -11688,4 +11803,3 @@
   - linux_amd64_cgo
   - windows_386_cgo
   - windows_amd64_cgo
-

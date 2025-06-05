@@ -1,4 +1,5 @@
-SELECT * FROM Artifact.Windows.Sigma.EventLogs( EventLogDirectory=srcDir + "/artifacts/testdata/files/evtx", Debug=FALSE, InlineSigmaRules=read_file(filename=srcDir + "/artifacts/testdata/files/evtx/proc_creation_win_whoami_as_system.yml"))[
+Query: SELECT * FROM Artifact.Windows.Sigma.EventLogs( EventLogDirectory=srcDir + "/artifacts/testdata/files/evtx", Debug=FALSE, InlineSigmaRules=read_file(filename=srcDir + "/artifacts/testdata/files/evtx/proc_creation_win_whoami_as_system.yml"))
+Output: [
  {
   "System": {
    "Provider": {
@@ -53,7 +54,6 @@ SELECT * FROM Artifact.Windows.Sigma.EventLogs( EventLogDirectory=srcDir + "/art
    "ParentCommandLine": "c:\\Windows\\System32\\cmd.exe"
   },
   "Message": "",
-  "Details": null,
   "_Match": {
    "match": true,
    "search_results": {
@@ -167,6 +167,8 @@ SELECT * FROM Artifact.Windows.Sigma.EventLogs( EventLogDirectory=srcDir + "/art
     "ruletype": "Sigma"
    }
   },
+  "Details": null,
   "_Source": "Windows.Sigma.EventLogs"
  }
 ]
+

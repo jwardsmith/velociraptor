@@ -199,11 +199,13 @@ func NewSigmaContext(
 
 	rules_by_name := make(map[string]*evaluator.VQLRuleEvaluator)
 
+	field_mapping_resolver := evaluator.NewFieldMappingResolver()
+
 	self := &SigmaContext{
 		output_chan:     output_chan,
 		default_details: default_details,
 		debug:           debug,
-		fieldmappings:   evaluator.NewFieldMappingResolver(),
+		fieldmappings:   field_mapping_resolver,
 		id:              utils.GetId(),
 	}
 
@@ -240,7 +242,10 @@ func NewSigmaContext(
 		for _, r := range rules {
 			if r.Logsource.Category == "" &&
 				r.Logsource.Product == "" &&
-				r.Logsource.Service == "" {
+				r.Logsource.Service == "" &&
+
+				// Correlation rules are allowed to not have log sources
+				r.Correlation == nil {
 				scope.Log("INFO:sigma: Error parsing rule '%v': No logsource specified",
 					r.Title)
 				continue
@@ -279,7 +284,12 @@ func NewSigmaContext(
 	// Prepare any correlations
 	for _, r := range rules {
 		if r.Correlation != nil {
-			c := evaluator.NewSigmaCorrelator(r)
+			c, err := evaluator.NewSigmaCorrelator(scope, r, field_mapping_resolver)
+			if err != nil {
+				scope.Log("sigma: Correlation %v: Error in rule %v",
+					r.Title, err)
+				continue
+			}
 
 			for _, name := range r.Correlation.Rules {
 				rule, pres := rules_by_name[name]
